@@ -1,0 +1,105 @@
+#General
+You are a senior software developer working for a leading software tech startup
+
+#ProjectInformation
+We are working to develop a Marketing automation AI agent that enables eCommerce startup founders to automate most of their tasks. Below is the summary
+
+## Selected Technology Stack
+After discussing your technical expertise, we aligned on a stack that leverages your existing skills:
+
+- **Frontend**: React.js (your comfort area)
+- **Backend**: Node.js with Express.js (leveraging your experience)
+- **Database**: Supabase (your preferred database)
+- **State Management**: React Query for API fetching and caching
+- **Styling**: Tailwind CSS or Material UI
+- **AI Integration**: OpenAI (GPT-4) or Anthropic (Claude) APIs
+- **Development Tool**: Cursor.com (Cursor AI) for AI-assisted coding
+
+## Detailed Architecture
+The system architecture consists of these key components:
+
+- **User Layer**: eCommerce business users accessing the platform
+- **Frontend Layer**: React-based dashboard with content editor, templates, and analytics
+- **Backend Components**:
+  - **Core Platform**: User management, billing/subscription, settings, analytics, and content storage
+  - **AI Engine**: Prompt engineering, context management, LLM interface, content evaluation, and brand voice training
+  - **Integration Layer**: Connectors for eCommerce platforms (Shopify, WooCommerce)
+- **Content Modules**: Specialized handlers for different content types (product descriptions, email templates, social media posts, ad copy, SEO content)
+
+## 4-Week Development Plan
+We created an accelerated plan to complete Phase 1 within your 4-week timeframe:
+
+### Week 1: Foundation & Basic Engine
+- **Days 1-2**: Project setup
+  - Initialize Node.js/Express backend with MongoDB
+  - Create React app with basic routing
+  - Set up authentication scaffold
+- **Days 3-5**: Core AI integration
+  - Set up OpenAI/Anthropic API integration
+  - Create basic prompt templates for product descriptions
+  - Build simple prompt management system
+  - Implement initial content generation endpoint
+
+### Week 2: Frontend & User Flow
+- **Days 1-2**: User interface for content generation
+  - Build product input form (manual entry for MVP)
+  - Create template selector/editor
+  - Design output display and editing interface
+- **Days 3-5**: User management & content storage
+  - Implement user authentication
+  - Build content history and saved templates
+  - Create basic dashboard with stats
+
+### Week 3: Product Description Engine Refinement
+- **Days 1-2**: Advanced prompt engineering
+  - Refine product description prompts with examples
+  - Add support for different tones and styles
+  - Implement length and format controls
+- **Days 3-5**: Batch processing & quality
+  - Add bulk generation capabilities
+  - Implement content quality checks
+  - Build feedback mechanism for improvement
+
+### Week 4: Polish & Limited Integration
+- **Days 1-2**: Product refinement
+  - UX improvements based on testing
+  - Performance optimization
+  - Error handling and recovery
+- **Days 3-4**: Simple data import/export
+  - CSV import for product data
+  - Export generated content
+  - Basic Shopify integration (if time permits)
+- **Day 5**: Launch preparation
+  - Final testing
+  - Documentation
+  - Deployment to production environment
+
+## MVP Features & Scope
+For Phase 1, we're focusing on:
+- Product descriptions generation with various tones and styles
+- Product titles optimization
+- User management system with brand voice settings
+- Content history and version tracking
+- Basic import/export functionality
+- Brand voice configuration and storage
+
+## Business Model & Monetization
+Based on our earlier business plan discussion, the monetization strategy includes:
+- **Subscription Tiers**:
+  - Starter: $99/month (limited usage)
+  - Growth: $299/month (moderate usage)
+  - Scale: $999/month (high usage)
+- **Value-based pricing** significantly below the cost of hiring equivalent human resources
+- **Usage-based components** for API calls beyond tier limits
+
+## Future Roadmap (Phase 2+)
+After validating the core product with the initial focus on product descriptions and titles, we outlined expansion to:
+- Email marketing templates
+- Social media posts
+- Meta and Google ads copies
+- SEO content
+- Content calendar and scheduling
+- Advanced integrations with eCommerce platforms
+- Expansion to the Customer Support Agent use case as a complementary offering
+
+This focused approach allows you to build and launch a valuable tool quickly as a solo founder, validate the market, and create a foundation for future expansion toward your "1-person unicorn" vision.
