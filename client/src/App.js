@@ -17,7 +17,9 @@ import CreateContentPage from './pages/content/CreateContentPage';
 import ContentHistoryPage from './pages/content/ContentHistoryPage';
 import ContentDetailPage from './pages/content/ContentDetailPage';
 import ProfilePage from './pages/user/ProfilePage';
-import BrandVoicePage from './pages/user/BrandVoicePage';
+import BrandVoicePage from './pages/BrandVoicePage';
+import CreateBrandVoicePage from './pages/CreateBrandVoicePage';
+import EditBrandVoicePage from './pages/EditBrandVoicePage';
 import NotFoundPage from './pages/NotFoundPage';
 
 // Context and hooks
@@ -62,6 +64,8 @@ const App = () => {
         </Route>
         <Route path="profile" element={<ProfilePage />} />
         <Route path="brand-voice" element={<BrandVoicePage />} />
+        <Route path="brand-voice/create" element={<CreateBrandVoicePage />} />
+        <Route path="brand-voice/edit/:id" element={<EditBrandVoicePage />} />
       </Route>
 
       {/* 404 route */}

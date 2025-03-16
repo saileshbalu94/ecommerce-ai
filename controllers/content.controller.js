@@ -2,70 +2,230 @@
 const { createClient } = require('@supabase/supabase-js');
 const aiService = require('../services/ai.service');
 const dotenv = require('dotenv');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 // Initialize Supabase client
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadsDir = path.join(__dirname, '../uploads');
+    // Create the directory if it doesn't exist
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+    cb(null, uploadsDir);
+  },
+  filename: function (req, file, cb) {
+    // Generate a unique filename
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+  }
+});
+
+// File upload middleware
+const upload = multer({ 
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB max file size
+  },
+  fileFilter: function (req, file, cb) {
+    // Accept images and PDFs only
+    if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only images and PDFs are allowed'), false);
+    }
+  }
+});
+
+// Helper function to upload file to Supabase Storage
+const uploadFileToSupabase = async (filePath, userId) => {
+  try {
+    const filename = path.basename(filePath);
+    const fileStream = fs.createReadStream(filePath);
+    const fileBuffer = await streamToBuffer(fileStream);
+    
+    // Upload to Supabase Storage
+    const { data, error } = await supabase
+      .storage
+      .from('product-images')
+      .upload(`${userId}/${filename}`, fileBuffer, {
+        contentType: getMimeType(filePath),
+        upsert: true
+      });
+    
+    if (error) throw error;
+    
+    // Get public URL
+    const { data: urlData } = supabase
+      .storage
+      .from('product-images')
+      .getPublicUrl(`${userId}/${filename}`);
+    
+    // Clean up local file
+    fs.unlinkSync(filePath);
+    
+    return urlData.publicUrl;
+  } catch (error) {
+    console.error('Error uploading file to Supabase:', error);
+    throw error;
+  }
+};
+
+// Helper to convert stream to buffer
+const streamToBuffer = async (stream) => {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    stream.on('data', (chunk) => chunks.push(chunk));
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+    stream.on('error', reject);
+  });
+};
+
+// Helper to get MIME type from file path
+const getMimeType = (filePath) => {
+  const ext = path.extname(filePath).toLowerCase();
+  const mimeTypes = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.webp': 'image/webp',
+    '.pdf': 'application/pdf'
+  };
+  return mimeTypes[ext] || 'application/octet-stream';
+};
+
 /**
  * Generate product description
  * @route POST /api/content/generate/description
  * @access Private
  */
-exports.generateDescription = async (req, res) => {
-  try {
-    console.log('\n=== Content Generation Request ===');
-    console.log('Raw request body:', req.body);
-    
-    // Extract nested data
-    const productData = req.body.productData || {};
-    const options = req.body.options || {};
-    
-    // Validate required fields
-    if (!productData.productName?.trim()) {
-      console.log('❌ Validation failed: Empty product name');
-      console.log('Product name received:', productData.productName);
-      return res.status(400).json({
+exports.generateDescription = [
+  // Handle file upload
+  upload.single('productImage'),
+  
+  // Process request after file upload
+  async (req, res) => {
+    try {
+      console.log('\n=== Content Generation Request ===');
+      
+      // Parse productData and options from form data or JSON body
+      let productData, options;
+      
+      if (req.file) {
+        // Request with file upload - data is in form fields
+        console.log('Processing request with file upload');
+        productData = JSON.parse(req.body.productData || '{}');
+        options = JSON.parse(req.body.options || '{}');
+        
+        // Upload file to Supabase storage
+        const imageUrl = await uploadFileToSupabase(req.file.path, req.user.id);
+        productData.productImage = imageUrl;
+        
+        console.log('File uploaded successfully:', imageUrl);
+      } else {
+        // Regular JSON request
+        console.log('Processing regular JSON request');
+        productData = req.body.productData || {};
+        options = req.body.options || {};
+      }
+      
+      console.log('Product Data:', productData);
+      console.log('Options:', options);
+      
+      // Remove validation for product name since it's now optional
+      
+      const processedData = {
+        productName: productData.productName?.trim() || '',
+        productCategory: productData.productCategory?.trim() || '',
+        productFeatures: Array.isArray(productData.productFeatures) ? productData.productFeatures.filter(f => f) : [],
+        targetAudience: productData.targetAudience?.trim() || '',
+        keywords: Array.isArray(productData.keywords) ? productData.keywords.filter(k => k) : [],
+        additionalInfo: productData.additionalInfo?.trim() || '',
+        productImage: productData.productImage || null // Include the image URL if uploaded
+      };
+      
+      const processedOptions = {
+        tone: options.tone || 'professional',
+        style: options.style || 'balanced',
+        length: options.length || 'medium'
+      };
+      
+      // If a brand voice ID is provided, fetch the brand voice
+      if (options.brandVoiceId) {
+        console.log(`\n=== Fetching Brand Voice ===`);
+        console.log('Brand Voice ID:', options.brandVoiceId);
+        
+        try {
+          const { data: brandVoice, error } = await supabase
+            .from('brand_voices')
+            .select('*')
+            .eq('id', options.brandVoiceId)
+            .eq('user_id', req.user.id)
+            .single();
+          
+          if (error) {
+            console.log('❌ Error fetching brand voice:', error);
+          } else if (brandVoice) {
+            console.log('✅ Brand voice found:', brandVoice.name);
+            
+            // Add brand voice information to options
+            processedOptions.brandVoiceId = brandVoice.id;
+            
+            // Override tone and style if available in the brand voice
+            if (brandVoice.tone?.primary) {
+              processedOptions.tone = brandVoice.tone.primary;
+            }
+            
+            if (brandVoice.style?.type) {
+              processedOptions.style = brandVoice.style.type;
+            }
+            
+            // Add vocabulary to the processed data if available
+            if (brandVoice.vocabulary?.keyPhrases?.length > 0) {
+              processedData.keyPhrases = brandVoice.vocabulary.keyPhrases;
+            }
+            
+            if (brandVoice.vocabulary?.powerWords?.length > 0) {
+              processedData.powerWords = brandVoice.vocabulary.powerWords;
+            }
+            
+            if (brandVoice.vocabulary?.avoidWords?.length > 0) {
+              processedData.avoidWords = brandVoice.vocabulary.avoidWords;
+            }
+          }
+        } catch (error) {
+          console.log('❌ Error processing brand voice:', error);
+        }
+      }
+  
+      console.log('\n=== Processed Data ===');
+      console.log('Product Data:', processedData);
+      console.log('Options:', processedOptions);
+  
+      const result = await aiService.generateProductDescription(processedData, processedOptions);
+  
+      res.status(200).json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      console.error('\n=== Generation Error ===');
+      console.error('Error details:', error);
+      res.status(500).json({
         success: false,
-        message: 'Product name is required'
+        message: error.message || 'Failed to generate description'
       });
     }
-
-    const processedData = {
-      productName: productData.productName.trim(),
-      productCategory: productData.productCategory?.trim() || '',
-      productFeatures: Array.isArray(productData.productFeatures) ? productData.productFeatures.filter(f => f) : [],
-      targetAudience: productData.targetAudience?.trim() || '',
-      keywords: Array.isArray(productData.keywords) ? productData.keywords.filter(k => k) : [],
-      additionalInfo: productData.additionalInfo?.trim() || ''
-    };
-
-    const processedOptions = {
-      tone: options.tone || 'professional',
-      style: options.style || 'balanced',
-      length: options.length || 'medium'
-    };
-
-    console.log('\n=== Processed Data ===');
-    console.log('Product Data:', processedData);
-    console.log('Options:', processedOptions);
-
-    const result = await aiService.generateProductDescription(processedData, processedOptions);
-
-    res.status(200).json({
-      success: true,
-      data: result
-    });
-  } catch (error) {
-    console.error('\n=== Generation Error ===');
-    console.error('Error details:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to generate description'
-    });
   }
-};
+];
 
 /**
  * Generate product title
@@ -154,57 +314,92 @@ exports.generateTitle = async (req, res) => {
  */
 exports.generateAlternatives = async (req, res) => {
   try {
+    const { contentId, feedback } = req.body;
+    const userId = req.user.id;
+    
+    console.log("Generate alternatives request:", { contentId, feedback });
+    
+    if (!contentId) {
+      return res.status(400).json({ message: 'Content ID is required' });
+    }
+    
     console.log('Handling content alternatives generation request...');
-    const { originalContent, instructions } = req.body;
     
-    // Validate input
-    if (!originalContent) {
-      console.log('Generation failed: Missing original content');
-      return res.status(400).json({
-        success: false,
-        message: 'Original content is required'
-      });
+    // Get the original content from Supabase
+    const { data: content, error } = await supabase
+      .from('content')
+      .select('*')
+      .eq('id', contentId)
+      .eq('user_id', userId)
+      .single();
+    
+    if (error || !content) {
+      console.error('Error fetching content:', error);
+      return res.status(404).json({ message: 'Content not found' });
     }
     
-    // Generate alternatives using AI service
-    const result = await aiService.generateAlternatives(
-      originalContent,
-      instructions || 'Make it more engaging and persuasive'
-    );
+    console.log('Generating content alternatives...');
     
-    // Update user's usage stats
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({
-        usage: {
-          contentGenerated: supabase.rpc('increment', { x: 1, field: 'usage.contentGenerated' }),
-          apiCalls: supabase.rpc('increment', { x: 1, field: 'usage.apiCalls' }),
-          lastUsed: new Date()
+    // Extract the actual content text from the content object
+    const originalContentText = content.generated_content?.text || content.generated_content || '';
+    console.log('Original content type:', typeof originalContentText);
+    console.log('Original content length:', originalContentText.length);
+    console.log('Feedback:', feedback);
+    
+    // Call the AI service with the feedback
+    const result = await aiService.generateAlternatives(originalContentText, feedback);
+    
+    // Update the content in Supabase with the new alternative
+    // First, check if we need to create a conversation field
+    let conversation = content.conversation || [];
+    
+    // If no conversation exists, create initial structure from existing content
+    if (conversation.length === 0) {
+      conversation = [
+        {
+          type: 'system',
+          content: content.generated_content,
+          timestamp: content.created_at,
+          metadata: content.metadata
         }
-      })
-      .eq('id', req.user.id);
-    
-    if (updateError) {
-      console.error('Error updating usage stats:', updateError);
+      ];
     }
     
-    console.log(`✅ Alternatives generated for user: ${req.user.email}`);
-    
-    res.status(200).json({
-      success: true,
-      message: 'Content alternatives generated successfully',
-      data: {
+    // Add the user feedback and AI response to the conversation
+    conversation.push(
+      {
+        type: 'user',
+        content: feedback,
+        timestamp: new Date().toISOString()
+      },
+      {
+        type: 'system',
         content: result.text,
+        timestamp: new Date().toISOString(),
         metadata: result.metadata
       }
-    });
+    );
+    
+    // Update the content in Supabase
+    const { error: updateError } = await supabase
+      .from('content')
+      .update({
+        conversation: conversation,
+        alternatives: [...(content.alternatives || []), result.text],
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', contentId);
+    
+    if (updateError) {
+      console.error('Error updating content with alternatives:', updateError);
+      return res.status(500).json({ message: 'Failed to save content alternatives' });
+    }
+    
+    // Return the generated alternative
+    res.json(result);
   } catch (error) {
     console.error('❌ Generate alternatives error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to generate content alternatives',
-      error: error.message
-    });
+    res.status(500).json({ message: `Failed to generate content alternatives: ${error.message}` });
   }
 };
 
@@ -213,73 +408,104 @@ exports.generateAlternatives = async (req, res) => {
  * @route POST /api/content/save
  * @access Private
  */
-exports.saveContent = async (req, res) => {
-  try {
-    console.log('Saving generated content...');
-    const {
-      title,
-      contentType,
-      originalInput,
-      generationParameters,
-      generatedContent,
-      metadata
-    } = req.body;
-    
-    // Validate input
-    if (!title || !generatedContent || !generatedContent.text) {
-      console.log('Save failed: Missing required fields');
-      return res.status(400).json({
+exports.saveContent = [
+  // Handle file upload
+  upload.single('productImage'),
+  
+  // Process request after file upload
+  async (req, res) => {
+    try {
+      console.log('Saving generated content...');
+      
+      let contentData;
+      
+      if (req.file) {
+        // Request with file upload
+        console.log('Processing content save with file upload');
+        contentData = JSON.parse(req.body.contentData || '{}');
+        
+        // Upload file to Supabase storage
+        const imageUrl = await uploadFileToSupabase(req.file.path, req.user.id);
+        
+        // Add image URL to original input
+        if (!contentData.originalInput) {
+          contentData.originalInput = {};
+        }
+        contentData.originalInput.productImage = imageUrl;
+        
+        console.log('File uploaded successfully:', imageUrl);
+      } else {
+        // Regular JSON request
+        contentData = req.body;
+      }
+      
+      const {
+        title,
+        contentType,
+        originalInput,
+        generationParameters,
+        generatedContent,
+        metadata
+      } = contentData;
+      
+      console.log('Content data to save:', contentData);
+
+      // Validate input
+      if (!generatedContent || !generatedContent.text) {
+        console.log('Save failed: Missing required fields');
+        return res.status(400).json({
+          success: false,
+          message: 'Title and generated content are required'
+        });
+      }
+      
+      // Create content record in Supabase
+      const { data, error } = await supabase
+        .from('content')
+        .insert({
+          user_id: req.user.id,
+          title,
+          content_type: contentType || 'product-description',
+          original_input: originalInput || {},
+          generation_parameters: generationParameters || {},
+          generated_content: {
+            text: generatedContent.text,
+            versions: [{
+              text: generatedContent.text,
+              created_at: new Date(),
+              feedback: null
+            }]
+          },
+          metadata: metadata || {},
+          status: 'draft'
+        })
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error saving content:', error);
+        throw error;
+      }
+      
+      console.log(`✅ Content saved successfully: ${data.id}`);
+      
+      res.status(201).json({
+        success: true,
+        message: 'Content saved successfully',
+        data: {
+          content: data
+        }
+      });
+    } catch (error) {
+      console.error('❌ Save content error:', error);
+      res.status(500).json({
         success: false,
-        message: 'Title and generated content are required'
+        message: 'Failed to save content',
+        error: error.message
       });
     }
-    
-    // Create content record in Supabase
-    const { data, error } = await supabase
-      .from('content')
-      .insert({
-        user_id: req.user.id,
-        title,
-        content_type: contentType || 'product-description',
-        original_input: originalInput || {},
-        generation_parameters: generationParameters || {},
-        generated_content: {
-          text: generatedContent.text,
-          versions: [{
-            text: generatedContent.text,
-            created_at: new Date(),
-            feedback: null
-          }]
-        },
-        metadata: metadata || {},
-        status: 'draft'
-      })
-      .select()
-      .single();
-    
-    if (error) {
-      console.error('Error saving content:', error);
-      throw error;
-    }
-    
-    console.log(`✅ Content saved successfully: ${data.id}`);
-    
-    res.status(201).json({
-      success: true,
-      message: 'Content saved successfully',
-      data: {
-        content: data
-      }
-    });
-  } catch (error) {
-    console.error('❌ Save content error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to save content',
-      error: error.message
-    });
   }
-};
+];
 
 /**
  * Get all content for a user
@@ -403,89 +629,35 @@ exports.getContentById = async (req, res) => {
  */
 exports.updateContent = async (req, res) => {
   try {
-    console.log(`Updating content ID: ${req.params.id}...`);
+    const { id } = req.params;
+    const userId = req.user.id;
+    const updates = req.body;
     
-    const {
-      title,
-      status,
-      generatedContent
-    } = req.body;
+    // Set the updated timestamp
+    updates.updated_at = new Date().toISOString();
     
-    // First, get current content
-    const { data: currentContent, error: getError } = await supabase
-      .from('content')
-      .select('*')
-      .eq('id', req.params.id)
-      .eq('user_id', req.user.id)
-      .single();
-    
-    if (getError) {
-      if (getError.code === 'PGRST116') {
-        // No rows returned
-        console.log('Update failed: Content not found');
-        return res.status(404).json({
-          success: false,
-          message: 'Content not found'
-        });
-      }
-      throw getError;
-    }
-    
-    // Prepare update data
-    const updateData = {};
-    if (title) updateData.title = title;
-    if (status) updateData.status = status;
-    
-    // If new content text is provided, add a new version
-    if (generatedContent && generatedContent.text) {
-      const newVersions = [
-        ...(currentContent.generated_content.versions || []),
-        {
-          text: generatedContent.text,
-          created_at: new Date(),
-          feedback: null
-        }
-      ];
-      
-      updateData.generated_content = {
-        ...currentContent.generated_content,
-        text: generatedContent.text,
-        versions: newVersions
-      };
-    }
-    
-    updateData.updated_at = new Date();
-    
-    // Update content
+    // Update the content in Supabase
     const { data, error } = await supabase
       .from('content')
-      .update(updateData)
-      .eq('id', req.params.id)
-      .eq('user_id', req.user.id)
+      .update(updates)
+      .eq('id', id)
+      .eq('user_id', userId)
       .select()
       .single();
     
     if (error) {
       console.error('Error updating content:', error);
-      throw error;
+      return res.status(500).json({ message: 'Failed to update content' });
     }
     
-    console.log(`✅ Content updated: ${data.id}`);
+    if (!data) {
+      return res.status(404).json({ message: 'Content not found' });
+    }
     
-    res.status(200).json({
-      success: true,
-      message: 'Content updated successfully',
-      data: {
-        content: data
-      }
-    });
+    res.json(data);
   } catch (error) {
     console.error('❌ Update content error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to update content',
-      error: error.message
-    });
+    res.status(500).json({ message: `Failed to update content: ${error.message}` });
   }
 };
 
@@ -634,5 +806,32 @@ exports.deleteContent = async (req, res) => {
       message: 'Failed to delete content',
       error: error.message
     });
+  }
+};
+
+// Function to generate alternative content directly from AI without saved content
+exports.generateAIAlternatives = async (req, res) => {
+  try {
+    const { originalContent, feedback } = req.body;
+    
+    // Log request details
+    console.log('Generating AI alternatives directly...');
+    console.log('Original content type:', typeof originalContent);
+    console.log('Original content length:', originalContent?.length || 0);
+    console.log('Feedback:', feedback);
+    
+    // Validate content
+    if (!originalContent) {
+      return res.status(400).json({ message: 'Original content is required' });
+    }
+    
+    // Call the AI service directly with the content text and feedback
+    const result = await aiService.generateAlternatives(originalContent, feedback);
+    
+    // Return the generated alternative
+    res.json(result);
+  } catch (error) {
+    console.error('❌ Generate AI alternatives error:', error);
+    res.status(500).json({ message: `Failed to generate alternatives: ${error.message}` });
   }
 };

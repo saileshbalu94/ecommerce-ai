@@ -1,5 +1,7 @@
 // controllers/user.controller.js - User controller
 const User = require('../models/user.model');
+// Import Supabase
+const supabase = require('../services/supabase');
 
 
 /**
@@ -177,57 +179,48 @@ exports.getUserUsage = async (req, res) => {
       });
     }
     
-    // Get content count by type
-    const contentTypeStats = await Content.aggregate([
-      { $match: { user: user._id } },
-      { $group: { _id: '$contentType', count: { $sum: 1 } } }
-    ]);
+    // Get content count from Supabase instead of using MongoDB Content model
+    const { data: contentData, error: contentError } = await supabase
+      .from('content')
+      .select('content_type, id')
+      .eq('user_id', req.user.id);
+    
+    if (contentError) {
+      throw contentError;
+    }
     
     // Format content type stats
     const contentStats = {};
-    contentTypeStats.forEach(stat => {
-      contentStats[stat._id] = stat.count;
+    contentData.forEach(item => {
+      const contentType = item.content_type;
+      contentStats[contentType] = (contentStats[contentType] || 0) + 1;
     });
     
-    // Get content creation over time (last 30 days)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    // Get usage statistics
+    const usageStats = await User.getUsageStats(req.user.id);
     
-    const dailyContentCreation = await Content.aggregate([
-      { 
-        $match: { 
-          user: user._id,
-          createdAt: { $gte: thirtyDaysAgo }
-        } 
-      },
-      {
-        $group: {
-          _id: { 
-            $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } 
-          },
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { '_id': 1 } }
-    ]);
-    
-    console.log(`✅ Usage statistics retrieved for user: ${user.email}`);
-    
+    // Return usage data
     res.status(200).json({
       success: true,
       data: {
-        usage: user.usage,
-        contentStats,
-        dailyContentCreation,
-        subscription: user.subscription
+        usage: {
+          contentGenerated: contentData.length || 0,
+          apiCalls: usageStats.apiCalls || 0,
+          lastUsed: usageStats.lastUsed || new Date()
+        },
+        contentStats: contentStats,
+        subscription: usageStats.subscription || {
+          plan: 'free',
+          status: 'trial'
+        },
+        recentContent: contentData.slice(0, 5) // Get 5 most recent content items
       }
     });
   } catch (error) {
     console.error('❌ Get user usage error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to retrieve usage statistics',
-      error: error.message
+      message: 'Failed to get usage statistics'
     });
   }
 };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import {
   Box,
@@ -33,7 +33,16 @@ import {
   AlertDialogHeader,
   AlertDialogContent,
   AlertDialogOverlay,
-  useDisclosure
+  useDisclosure,
+  Image,
+  Input,
+  IconButton,
+  Tooltip,
+  Avatar,
+  InputGroup,
+  InputRightElement,
+  Center,
+  Spinner
 } from '@chakra-ui/react';
 import {
   FiEdit,
@@ -46,9 +55,14 @@ import {
   FiList,
   FiStar,
   FiClock,
-  FiCheck
+  FiCheck,
+  FiSend,
+  FiThumbsUp
 } from 'react-icons/fi';
 import contentService from '../../services/content.service';
+import api from '../../services/api';
+import { formatDistance } from 'date-fns';
+import supabase from '../../services/supabase';
 
 /**
  * ContentDetailPage - View and manage a specific content piece
@@ -73,6 +87,9 @@ const ContentDetailPage = () => {
   const [feedbackComment, setFeedbackComment] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [selectedMessageIndex, setSelectedMessageIndex] = useState(-1);
+  const messagesEndRef = useRef(null);
   
   // Content status options
   const statusColors = {
@@ -93,43 +110,129 @@ const ContentDetailPage = () => {
     });
   };
   
-  // Load content data
+  // Fetch content data
   useEffect(() => {
     const fetchContent = async () => {
       try {
-        setIsLoading(true);
+        // Use the contentService instead of direct API call
         const result = await contentService.getContentById(id);
+        console.log("ContentService response:", result);
         
-        if (result.success) {
-          setContent(result.data.content);
-          setEditedContent(result.data.content.generated_content.text);
+        // Extract the content data, handling different response structures
+        // The content might be in different places depending on the API response structure
+        let contentData;
+        
+        if (result.data && result.data.content) {
+          // Handle success response with data.content structure
+          contentData = result.data.content;
+          console.log("Extracted content from result.data.content");
+        } else if (result.data) {
+          // Handle success response with data structure
+          contentData = result.data;
+          console.log("Using result.data as content");
         } else {
-          toast({
-            title: 'Error',
-            description: 'Failed to load content.',
-            status: 'error',
-            duration: 3000,
-            isClosable: true,
-          });
-          navigate('/content/history');
+          // Assume content is directly in result
+          contentData = result;
+          console.log("Using direct result as content");
         }
+        
+        console.log("Extracted content data:", contentData);
+        
+        // Check that we have a proper ID
+        if (!contentData || !contentData.id) {
+          console.error("Content data missing ID field:", contentData);
+          
+          // Use the ID from the URL params as a fallback
+          if (contentData && id) {
+            console.log("Using ID from URL params as fallback:", id);
+            contentData = {
+              ...contentData,
+              id: id
+            };
+          } else {
+            toast({
+              title: "Error",
+              description: "Content data missing ID field",
+              status: "error",
+              duration: 5000,
+              isClosable: true,
+            });
+            setIsLoading(false);
+            return;
+          }
+        }
+        
+        // Convert from Supabase naming convention to camelCase for frontend
+        const processedContent = {
+          ...contentData,
+          id: contentData.id,
+          productData: contentData.product_data,
+          generatedContent: contentData.generated_content,
+          createdAt: contentData.created_at,
+          updatedAt: contentData.updated_at,
+          userId: contentData.user_id,
+          acceptedVersion: contentData.accepted_version,
+          acceptedVersionIndex: contentData.accepted_version_index
+        };
+        
+        // Log the ID specifically to confirm it's correct
+        console.log("Content ID:", processedContent.id);
+        
+        // IMPORTANT: Initialize the conversation array if it doesn't exist
+        if (!processedContent.conversation || processedContent.conversation.length === 0) {
+          processedContent.conversation = [
+            {
+              type: 'system',
+              content: processedContent.generatedContent || processedContent.generated_content,
+              timestamp: processedContent.createdAt || processedContent.created_at,
+              metadata: processedContent.metadata
+            }
+          ];
+          
+          // Add alternatives as system messages if they exist
+          if (processedContent.alternatives && processedContent.alternatives.length > 0) {
+            processedContent.alternatives.forEach((alt, index) => {
+              processedContent.conversation.push({
+                type: 'user',
+                content: `Generate alternative #${index + 1}`,
+                timestamp: processedContent.updatedAt || processedContent.updated_at
+              });
+              
+              processedContent.conversation.push({
+                type: 'system',
+                content: alt,
+                timestamp: processedContent.updatedAt || processedContent.updated_at,
+                metadata: processedContent.metadata
+              });
+            });
+          }
+        }
+        
+        console.log("Processed content with conversation:", processedContent);
+        setContent(processedContent);
+        setIsLoading(false);
       } catch (error) {
-        console.error('Error loading content:', error);
+        console.error("Error fetching content:", error);
         toast({
-          title: 'Error',
-          description: 'Failed to load content. Please try again.',
-          status: 'error',
-          duration: 3000,
+          title: "Error",
+          description: "Failed to fetch content",
+          status: "error",
+          duration: 5000,
           isClosable: true,
         });
-        navigate('/content/history');
-      } finally {
         setIsLoading(false);
       }
     };
-    
-    fetchContent();
-  }, [id, navigate, toast]);
+
+    if (id) {
+      fetchContent();
+    }
+  }, [id, toast]);
+  
+  // Scroll to bottom when conversation changes
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [content?.conversation]);
   
   // Copy content to clipboard
   const copyToClipboard = () => {
@@ -324,6 +427,130 @@ const ContentDetailPage = () => {
     }
   };
   
+  // Handle sending feedback for alternative generation
+  const handleSendFeedback = async () => {
+    if (!feedbackText.trim()) return;
+    
+    setIsLoading(true);
+    
+    try {
+      // Log the content object to see what we're working with
+      console.log('Content object:', content);
+      
+      // Add the user message to the conversation immediately for UI responsiveness
+      setContent(prev => ({
+        ...prev,
+        conversation: [
+          ...(prev.conversation || []),
+          {
+            type: 'user',
+            content: feedbackText,
+            timestamp: new Date().toISOString()
+          }
+        ]
+      }));
+      
+      // IMPORTANT: Check if we're dealing with saved content (has an ID) 
+      // or unsaved content (need to use direct AI generation)
+      let result;
+      
+      if (content.id) {
+        // Use the content ID for saved content
+        console.log('Using saved content ID:', content.id);
+        result = await contentService.generateAlternatives(content.id, feedbackText);
+      } else {
+        // For unsaved content, use the direct AI alternative generation endpoint
+        console.log('Using direct AI generation for unsaved content');
+        
+        // Get the content text to use
+        const contentText = content.generated_content?.text || 
+                            content.generatedContent?.text || 
+                            (typeof content.generatedContent === 'string' ? content.generatedContent : '');
+        
+        // Call the AI directly using the authenticated API client
+        const response = await api.post(
+          '/content/ai/alternatives',
+          {
+            originalContent: contentText,
+            feedback: feedbackText
+          }
+        );
+        
+        result = response.data;
+      }
+      
+      // Clear the feedback input
+      setFeedbackText('');
+      
+      // Add the system response to the conversation
+      if (result && result.text) {
+        setContent(prev => ({
+          ...prev,
+          conversation: [
+            ...(prev.conversation || []),
+            {
+              type: 'system',
+              content: result.text,
+              timestamp: new Date().toISOString(),
+              metadata: result.metadata
+            }
+          ],
+          // Also update alternatives array for backward compatibility
+          alternatives: [...(prev.alternatives || []), result.text]
+        }));
+      }
+    } catch (error) {
+      console.error("Error generating alternative:", error);
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to generate alternative content",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Handle accepting a specific version
+  const handleAcceptVersion = async (index) => {
+    if (!content || !content.conversation) return;
+    
+    // Find the system message at this index
+    const systemMessages = content.conversation.filter(msg => msg.type === 'system');
+    const selectedMessage = systemMessages[index];
+    
+    if (!selectedMessage) return;
+    
+    setSelectedMessageIndex(index);
+    
+    try {
+      // Update the content to mark this version as accepted
+      await api.put(`/content/${content.id}`, {
+        accepted_version: selectedMessage.content,
+        accepted_version_index: index
+      });
+      
+      toast({
+        title: "Version accepted",
+        description: "This version has been accepted as the final content",
+        status: "success",
+        duration: 3000,
+        isClosable: true,
+      });
+    } catch (error) {
+      console.error("Error accepting version:", error);
+      toast({
+        title: "Error",
+        description: "Failed to accept this version",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+  
   // Display loading skeleton
   if (isLoading) {
     return (
@@ -364,6 +591,14 @@ const ContentDetailPage = () => {
       </Box>
     );
   }
+  
+  // Get the system messages for accept/copy functionality
+  const systemMessages = content.conversation ? 
+    content.conversation.filter(msg => msg.type === 'system') : 
+    [];
+  
+  console.log("Content state:", content);
+  console.log("Conversation array:", content?.conversation);
   
   return (
     <Box bg={bgColor} minH="calc(100vh - 60px)" py={5}>
@@ -786,6 +1021,22 @@ const ContentDetailPage = () => {
                           <Text>{content.original_input.keywords.join(', ')}</Text>
                         </Flex>
                       )}
+                    </>
+                  )}
+                  
+                  {content.original_input.productImage && (
+                    <>
+                      <Divider />
+                      <Heading size="sm" mb={2}>Product Image</Heading>
+                      <Box mb={4}>
+                        <Image 
+                          src={content.original_input.productImage} 
+                          alt={content.original_input.productName || "Product Image"}
+                          maxH="300px"
+                          objectFit="contain"
+                          borderRadius="md"
+                        />
+                      </Box>
                     </>
                   )}
                 </VStack>

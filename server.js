@@ -11,6 +11,7 @@ const { createClient } = require('@supabase/supabase-js');
 // Route imports
 const contentRoutes = require('./routes/content.routes');
 const userRoutes = require('./routes/user.routes');
+const brandVoiceRoutes = require('./routes/brandVoice.routes');
 
 
 
@@ -36,6 +37,7 @@ app.use(morgan('dev')); // Log HTTP requests
 // API Routes
 app.use('/api/content', contentRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api', brandVoiceRoutes);
 
 // Root route for API health check
 app.get('/', (req, res) => {

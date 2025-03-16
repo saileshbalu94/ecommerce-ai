@@ -39,6 +39,12 @@ import api from '../../services/api';
  * DashboardCard - A card component for dashboard stats and actions
  */
 const DashboardCard = ({ title, value, description, icon, color, footer, isLoading }) => {
+
+  if (!isLoading && typeof value === 'object' && value !== null && !React.isValidElement(value)) {
+    console.error(`DashboardCard "${title}" received an object as value which cannot be rendered:`, value);
+    // Provide a fallback value
+    value = JSON.stringify(value).substring(0, 20) + '...';
+  }
   const cardBg = useColorModeValue('white', 'gray.700');
   const statColor = useColorModeValue(`${color}.500`, `${color}.300`);
   
@@ -87,25 +93,43 @@ const DashboardPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const bgColor = useColorModeValue('gray.50', 'gray.900');
   
+  console.log('API object:', api);
+  console.log('User object:', user);
   // Load user stats on mount
   useEffect(() => {
     const loadStats = async () => {
+      console.log('Starting to load stats...');
       try {
+        console.log('Making API request to /users/usage');
         const response = await api.get('/users/usage');
+        console.log('API Response:', response);
+        console.log('API Response type:', typeof response);
+        console.log('Response.data:', response.data);
+        console.log('Response.data.data:', response.data.data);
+        
         setStats(response.data.data);
+        console.log('Stats set to:', response.data.data);
       } catch (error) {
         console.error('Error loading usage stats:', error);
       } finally {
         setIsLoading(false);
+        console.log('Loading completed, isLoading set to false');
       }
     };
+    
     
     loadStats();
   }, []);
   
   // Calculate subscription usage percentage
   const getUsagePercentage = () => {
-    if (!stats || !user) return 0;
+    console.log('getUsagePercentage called with stats:', stats);
+    console.log('getUsagePercentage called with user:', user);
+    
+    if (!stats || !user) {
+      console.log('stats or user is null, returning 0');
+      return 0;
+    }
     
     const limits = {
       'free': 5,
@@ -114,12 +138,28 @@ const DashboardPage = () => {
       'scale': 1000
     };
     
-    const limit = limits[user.subscription.plan] || 5;
-    return Math.min(Math.round((stats.usage.contentGenerated / limit) * 100), 100);
+    const plan = user.subscription?.plan;
+    console.log('User subscription plan:', plan);
+    
+    const limit = limits[plan] || 5;
+    console.log('Usage limit for plan:', limit);
+    
+    // Ensure contentGenerated is a number
+    const contentGenerated = typeof stats.usage?.contentGenerated === 'number' 
+      ? stats.usage.contentGenerated 
+      : 0;
+    console.log('contentGenerated value:', contentGenerated);
+    console.log('contentGenerated type:', typeof stats.usage?.contentGenerated);
+      
+    const percentage = Math.min(Math.round((contentGenerated / limit) * 100), 100);
+    console.log('Calculated percentage:', percentage);
+    return percentage;
   };
   
   // Format date string
   const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
       month: 'short',
@@ -173,7 +213,7 @@ const DashboardPage = () => {
                     {isLoading ? (
                       <Skeleton display="inline-block" height="1em" width="3em" />
                     ) : (
-                      `${stats?.usage.contentGenerated || 0} / ${user?.subscription?.plan === 'scale' ? 'Unlimited' : getUsagePercentage() + '%'}`
+                      `${typeof stats?.usage?.contentGenerated === 'number' ? stats.usage.contentGenerated : 0} / ${user?.subscription?.plan === 'scale' ? 'Unlimited' : getUsagePercentage() + '%'}`
                     )}
                   </Text>
                 </Flex>
@@ -190,9 +230,11 @@ const DashboardPage = () => {
         
         {/* Stats grid */}
         <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6} mb={8}>
+          {console.log('Rendering DashboardCard for Content Generated')}
+          {console.log('stats?.usage?.contentGenerated value:', stats?.usage?.contentGenerated)}
           <DashboardCard
             title="Content Generated"
-            value={isLoading ? "-" : stats?.usage.contentGenerated || 0}
+            value={isLoading ? "-" : (typeof stats?.usage?.contentGenerated === 'number' ? stats.usage.contentGenerated : 0)}
             description="Total pieces of content"
             icon={FiMessageSquare}
             color="blue"
@@ -212,9 +254,11 @@ const DashboardPage = () => {
             }
           />
           
+          {console.log('Rendering DashboardCard for Recent Activity')}
+          {console.log('stats?.usage.lastUsed value:', stats?.usage?.lastUsed)}
           <DashboardCard
             title="Recent Activity"
-            value={isLoading ? "-" : formatDate(stats?.usage.lastUsed || new Date())}
+            value={isLoading ? "-" : formatDate(stats?.usage?.lastUsed || new Date())}
             description="Last content generation"
             icon={FiClock}
             color="purple"
@@ -234,20 +278,26 @@ const DashboardPage = () => {
             }
           />
           
+          {console.log('Rendering DashboardCard for API Calls')}
+          {console.log('stats?.usage.apiCalls value:', stats?.usage?.apiCalls)}
           <DashboardCard
             title="API Calls"
-            value={isLoading ? "-" : stats?.usage.apiCalls || 0}
+            value={isLoading ? "-" : (
+              stats?.usage?.apiCalls?.body?.x || "N/A"
+            )}
             description="Total API requests"
             icon={FiTrendingUp}
             color="green"
             isLoading={isLoading}
           />
           
+          {console.log('Rendering DashboardCard for Subscription')}
+          {console.log('user?.subscription:', user?.subscription)}
           <DashboardCard
             title="Subscription"
             value={
               <Flex align="center">
-                <Text mr={2}>{user?.subscription?.plan.charAt(0).toUpperCase() + user?.subscription?.plan.slice(1)}</Text>
+                <Text mr={2}>{user?.subscription?.plan?.charAt(0)?.toUpperCase() + user?.subscription?.plan?.slice(1)}</Text>
                 <Badge colorScheme={user?.subscription?.status === 'active' ? 'green' : 'yellow'} fontSize="xs">
                   {user?.subscription?.status}
                 </Badge>

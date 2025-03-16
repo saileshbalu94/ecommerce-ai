@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   Box,
@@ -64,8 +64,8 @@ const ProfilePage = () => {
   
   // Profile form state
   const [profileData, setProfileData] = useState({
-    name: user?.name || '',
-    email: user?.email || ''
+    name: '',
+    email: ''
   });
   
   // Password form state
@@ -92,6 +92,16 @@ const ProfilePage = () => {
   // Loading states
   const [isProfileSaving, setIsProfileSaving] = useState(false);
   const [isPasswordSaving, setIsPasswordSaving] = useState(false);
+  
+  // Initialize form data when user data is available
+  useEffect(() => {
+    if (user) {
+      setProfileData({
+        name: user.name || '',
+        email: user.email || ''
+      });
+    }
+  }, [user]);
   
   // Derived data for subscription
   const subscriptionEndDate = user?.subscription?.endDate
@@ -120,7 +130,12 @@ const ProfilePage = () => {
     };
     
     const limit = limits[user.subscription?.plan] || 5;
-    return Math.min(Math.round((user.usage?.contentGenerated / limit) * 100), 100);
+    // Ensure contentGenerated is always a number
+    const contentGenerated = typeof user?.usage?.contentGenerated === 'number' 
+      ? user.usage.contentGenerated 
+      : 0;
+      
+    return Math.min(Math.round((contentGenerated / limit) * 100), 100);
   };
   
   // Format date string
@@ -219,7 +234,7 @@ const ProfilePage = () => {
   };
   
   // Save profile changes
-  const saveProfile = async () => {
+  const handleSaveProfile = async () => {
     if (!validateProfileForm()) {
       return;
     }
@@ -234,7 +249,9 @@ const ProfilePage = () => {
         email: profileData.email
       });
       
-      if (result.success) {
+      console.log('Profile update result:', result);
+      
+      if (result && result.success) {
         toast({
           title: 'Profile Updated',
           description: 'Your profile information has been updated successfully.',
@@ -245,7 +262,7 @@ const ProfilePage = () => {
       } else {
         toast({
           title: 'Update Failed',
-          description: result.error || 'Failed to update profile. Please try again.',
+          description: typeof result?.error === 'string' ? result?.error : 'Failed to update profile. Please try again.',
           status: 'error',
           duration: 5000,
           isClosable: true,
@@ -266,7 +283,7 @@ const ProfilePage = () => {
   };
   
   // Change password
-  const changePassword = async () => {
+  const handleChangePassword = async () => {
     if (!validatePasswordForm()) {
       return;
     }
@@ -279,7 +296,9 @@ const ProfilePage = () => {
         newPassword: passwordData.newPassword
       });
       
-      if (result.success) {
+      console.log('Password update result:', result);
+      
+      if (result && result.success) {
         // Clear password fields
         setPasswordData({
           currentPassword: '',
@@ -297,7 +316,7 @@ const ProfilePage = () => {
       } else {
         toast({
           title: 'Update Failed',
-          description: result.error || 'Failed to update password. Please check your current password.',
+          description: typeof result?.error === 'string' ? result?.error : 'Failed to update password. Please check your current password.',
           status: 'error',
           duration: 5000,
           isClosable: true,
@@ -316,6 +335,31 @@ const ProfilePage = () => {
       setIsPasswordSaving(false);
     }
   };
+  
+  // Add console log to check the user object
+  console.log('User object:', user);
+
+  // Add console log to check the subscription object
+  console.log('Subscription object:', user?.subscription);
+
+  // Add console log to check the usage object
+  console.log('Usage object:', user?.usage);
+  
+  // If user data is not available yet, show loading state
+  if (!user) {
+    return (
+      <Box bg={bgColor} minH="calc(100vh - 60px)" py={5} textAlign="center">
+        <Container maxW="container.xl">
+          <Text>Loading profile information...</Text>
+        </Container>
+      </Box>
+    );
+  }
+  
+  // Ensure we extract a numeric value from contentGenerated or use 0
+  const contentGeneratedValue = typeof user?.usage?.contentGenerated === 'number' 
+    ? user.usage.contentGenerated 
+    : 0;
   
   return (
     <Box bg={bgColor} minH="calc(100vh - 60px)" py={5}>
@@ -356,9 +400,7 @@ const ProfilePage = () => {
                 <StatLabel>Subscription Plan</StatLabel>
                 <Flex align="center" mt={1}>
                   <StatNumber mr={2}>
-                    {user?.subscription?.plan
-                      ? user.subscription.plan.charAt(0).toUpperCase() + user.subscription.plan.slice(1)
-                      : 'Free'}
+                    {user?.subscription?.plan ? user.subscription.plan.charAt(0).toUpperCase() + user.subscription.plan.slice(1) : 'Free'}
                   </StatNumber>
                   <Badge colorScheme={subscriptionStatusColors[user?.subscription?.status] || 'gray'}>
                     {user?.subscription?.status || 'inactive'}
@@ -379,7 +421,7 @@ const ProfilePage = () => {
                 colorScheme="blue"
                 leftIcon={<Icon as={FiCreditCard} />}
                 as={RouterLink}
-                to="#"
+                to="/subscription"
                 mt={2}
               >
                 Manage Subscription
@@ -392,7 +434,7 @@ const ProfilePage = () => {
               <Stat>
                 <StatLabel>Content Generated</StatLabel>
                 <StatNumber>
-                  {user?.usage?.contentGenerated || 0}
+                  {contentGeneratedValue}
                 </StatNumber>
                 <StatHelpText>
                   <StatArrow type="increase" />
@@ -420,7 +462,7 @@ const ProfilePage = () => {
               <Stat>
                 <StatLabel>Usage</StatLabel>
                 <StatNumber>
-                  {getUsagePercentage()}%
+                  {typeof getUsagePercentage() === 'number' ? getUsagePercentage() : 0}%
                 </StatNumber>
                 <StatHelpText>
                   of your monthly limit
@@ -436,7 +478,9 @@ const ProfilePage = () => {
                 mb={2}
               />
               <Text fontSize="xs">
-                {user?.usage?.contentGenerated || 0} / 
+                {typeof user?.usage?.contentGenerated === 'number' 
+                  ? user.usage.contentGenerated 
+                  : 0} / 
                 {user?.subscription?.plan === 'scale' 
                   ? 'Unlimited' 
                   : '50'} items
@@ -497,7 +541,7 @@ const ProfilePage = () => {
                 <Button
                   colorScheme="blue"
                   leftIcon={<Icon as={FiSave} />}
-                  onClick={saveProfile}
+                  onClick={handleSaveProfile}
                   isLoading={isProfileSaving}
                   loadingText="Saving..."
                   mt={2}
@@ -596,7 +640,7 @@ const ProfilePage = () => {
                 <Button
                   colorScheme="blue"
                   leftIcon={<Icon as={FiSave} />}
-                  onClick={changePassword}
+                  onClick={handleChangePassword}
                   isLoading={isPasswordSaving}
                   loadingText="Updating..."
                   mt={2}
@@ -663,7 +707,7 @@ const ProfilePage = () => {
                 mt={6}
                 colorScheme="purple"
                 as={RouterLink}
-                to="#"
+                to="/subscription/upgrade"
               >
                 Upgrade Plan
               </Button>

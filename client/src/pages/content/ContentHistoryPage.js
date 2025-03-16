@@ -56,6 +56,7 @@ import {
   FiPlus
 } from 'react-icons/fi';
 import contentService from '../../services/content.service';
+import { useNavigate } from 'react-router-dom';
 
 /**
  * ContentHistoryPage - View and manage content history
@@ -65,6 +66,7 @@ const ContentHistoryPage = () => {
   const bgColor = useColorModeValue('gray.50', 'gray.900');
   const cardBg = useColorModeValue('white', 'gray.800');
   const view = useBreakpointValue({ base: 'cards', lg: 'table' });
+  const navigate = useNavigate();
   
   // Delete confirmation dialog
   const { isOpen, onOpen, onClose } = useDisclosure();
@@ -280,6 +282,23 @@ const ContentHistoryPage = () => {
     });
   };
   
+  // Handle view content click with validation
+  const handleViewContent = (contentId) => {
+    if (!contentId) {
+      toast({
+        title: "Error",
+        description: "Invalid content ID",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+    
+    console.log(`Navigating to content: ${contentId}`);
+    navigate(`/content/${contentId}`);
+  };
+  
   // Render content card view (mobile)
   const renderContentCards = () => {
     if (isLoading) {
@@ -346,15 +365,13 @@ const ContentHistoryPage = () => {
             <MenuList>
               <MenuItem 
                 icon={<Icon as={FiEye} />}
-                as={RouterLink}
-                to={`/content/${content.id}`}
+                onClick={() => handleViewContent(content.id)}
               >
                 View
               </MenuItem>
               <MenuItem 
                 icon={<Icon as={FiEdit} />}
-                as={RouterLink}
-                to={`/content/${content.id}`}
+                onClick={() => handleViewContent(content.id)}
               >
                 Edit
               </MenuItem>
@@ -398,11 +415,12 @@ const ContentHistoryPage = () => {
         <HStack spacing={2}>
           <Button
             size="sm"
-            as={RouterLink}
-            to={`/content/${content.id}`}
-            leftIcon={<Icon as={FiEye} />}
+            variant="ghost"
+            onClick={() => handleViewContent(content.id)}
+            aria-label="View"
+            title="View"
           >
-            View
+            <Icon as={FiEye} />
           </Button>
           <Button
             size="sm"
@@ -619,8 +637,7 @@ const ContentHistoryPage = () => {
                           <Button
                             size="sm"
                             variant="ghost"
-                            as={RouterLink}
-                            to={`/content/${content.id}`}
+                            onClick={() => handleViewContent(content.id)}
                             aria-label="View"
                             title="View"
                           >

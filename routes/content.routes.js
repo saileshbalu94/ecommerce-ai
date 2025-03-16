@@ -18,6 +18,9 @@ router.post('/generate/title', contentController.generateTitle);
 // Route: Generate alternatives for existing content
 router.post('/generate/alternatives', contentController.generateAlternatives);
 
+// Generate alternatives directly from AI without content ID
+router.post('/ai/alternatives', contentController.generateAIAlternatives);
+
 // Route: Save generated content
 router.post('/save', contentController.saveContent);
 

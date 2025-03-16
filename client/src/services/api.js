@@ -17,8 +17,31 @@ api.interceptors.request.use(
       const { data: { session } } = await supabase.auth.getSession();
       
       // If session exists, add access token to headers
-      if (session) {
+      if (session && session.access_token) {
         config.headers.Authorization = `Bearer ${session.access_token}`;
+        console.log(`✅ Adding auth token to ${config.url}`);
+      } else {
+        console.warn(`⚠️ No auth token available for request to ${config.url}`);
+        
+        // Try to refresh the session if it exists but token is missing
+        if (session) {
+          console.log('Session exists but no token - attempting refresh');
+          const { data, error } = await supabase.auth.refreshSession();
+          
+          if (!error && data.session) {
+            console.log('Session refreshed successfully, adding new token');
+            config.headers.Authorization = `Bearer ${data.session.access_token}`;
+          } else {
+            console.error('Failed to refresh session:', error);
+          }
+        } else {
+          // If no session at all, redirect to login
+          console.warn('No active session found - redirecting to login');
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+            throw new Error('Authentication required - redirecting to login');
+          }
+        }
       }
       
       return config;
@@ -41,24 +64,29 @@ api.interceptors.response.use(
     
     // Handle authentication errors
     if (error.response && error.response.status === 401) {
+      console.log('🔐 Authentication error - checking session status');
       // Get current session
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
         // If no session and got 401, redirect to login
+        console.log('🔑 No active session found - redirecting to login');
         if (window.location.pathname !== '/login') {
           window.location.href = '/login';
         }
       } else {
         // If has session but got 401, try to refresh token
+        console.log('🔄 Session exists but token may be expired - attempting refresh');
         const { data, error: refreshError } = await supabase.auth.refreshSession();
         
         if (refreshError || !data.session) {
           // If refresh failed, sign out and redirect
+          console.log('❌ Token refresh failed - signing out');
           await supabase.auth.signOut();
           window.location.href = '/login';
         } else {
           // If refresh succeeded, retry the request
+          console.log('✅ Token refreshed successfully - retrying request');
           return api(error.config);
         }
       }

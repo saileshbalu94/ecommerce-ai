@@ -146,3 +146,28 @@ exports.checkSubscription = async (req, res, next) => {
     });
   }
 };
+
+exports.authenticateUser = async (req, res, next) => {
+  try {
+    // Get the token from the request headers
+    const token = req.headers.authorization?.split(' ')[1];
+    
+    if (!token) {
+      return res.status(401).json({ success: false, message: 'Authentication token is required' });
+    }
+    
+    // Verify the token with Supabase
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    
+    if (error || !user) {
+      return res.status(401).json({ success: false, message: 'Invalid or expired token' });
+    }
+    
+    // Add the user to the request object
+    req.user = user;
+    
+    next();
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

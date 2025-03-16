@@ -81,6 +81,25 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- BRAND_VOICES TABLE - Stores brand voice profiles
+CREATE TABLE public.brand_voices (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES auth.users(id) NOT NULL,
+  name TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  is_default BOOLEAN DEFAULT false,
+  brand_identity JSONB,
+  tone JSONB,
+  style JSONB,
+  language JSONB,
+  content_structure JSONB,
+  vocabulary JSONB,
+  examples JSONB,
+  visual_elements JSONB,
+  seo_preferences JSONB
+);
+
 -- Row level security policies
 
 -- PROFILES table policies
@@ -152,5 +171,50 @@ CREATE POLICY "Service roles can view all content"
 -- Service roles can delete all content
 CREATE POLICY "Service roles can delete all content" 
   ON public.content 
+  FOR DELETE 
+  USING (auth.role() = 'service_role');
+
+-- BRAND_VOICES table policies
+ALTER TABLE public.brand_voices ENABLE ROW LEVEL SECURITY;
+
+-- Users can view their own brand voices
+CREATE POLICY "Users can view own brand voices" 
+  ON public.brand_voices 
+  FOR SELECT 
+  USING (auth.uid() = user_id);
+
+-- Users can create their own brand voices
+CREATE POLICY "Users can create own brand voices" 
+  ON public.brand_voices 
+  FOR INSERT 
+  WITH CHECK (auth.uid() = user_id);
+
+-- Users can update their own brand voices
+CREATE POLICY "Users can update own brand voices" 
+  ON public.brand_voices 
+  FOR UPDATE 
+  USING (auth.uid() = user_id);
+
+-- Users can delete their own brand voices
+CREATE POLICY "Users can delete own brand voices" 
+  ON public.brand_voices 
+  FOR DELETE 
+  USING (auth.uid() = user_id);
+
+-- Service roles can view all brand voices
+CREATE POLICY "Service roles can view all brand voices" 
+  ON public.brand_voices 
+  FOR SELECT 
+  USING (auth.role() = 'service_role');
+
+-- Service roles can update all brand voices
+CREATE POLICY "Service roles can update all brand voices" 
+  ON public.brand_voices 
+  FOR UPDATE 
+  USING (auth.role() = 'service_role');
+
+-- Service roles can delete all brand voices
+CREATE POLICY "Service roles can delete all brand voices" 
+  ON public.brand_voices 
   FOR DELETE 
   USING (auth.role() = 'service_role');

@@ -296,16 +296,27 @@ export const AuthProvider = ({ children }) => {
         .from('profiles')
         .update({
           name: profileData.name,
+          email: profileData.email,
           updated_at: new Date()
         })
         .eq('id', user.id);
       
       if (error) throw error;
+
+      // Update email in Auth if it changed
+      if (profileData.email !== user.email) {
+        const { error: emailError } = await supabase.auth.updateUser({
+          email: profileData.email
+        });
+        
+        if (emailError) throw emailError;
+      }
       
       // Update local user state
       setUser(prev => ({
         ...prev,
-        name: profileData.name
+        name: profileData.name,
+        email: profileData.email
       }));
       
       toast({
