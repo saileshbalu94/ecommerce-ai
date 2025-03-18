@@ -1,0 +1,212 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+
+# Your rule content
+
+- You can @ files here
+- You can use markdown but dont have to
+
+1. Overview
+The Google Ads module will extend eContent AI to support the generation of ad copy for Google Ads campaigns. This will be implemented as a separate content generation pathway from the existing product description and title generator, while leveraging the same brand voice settings and overall UI framework. The module will include campaign management functionality, allowing users to save, reuse, and manage campaign settings.
+2. User Flow
+
+User navigates to a new "Marketing Content" section in the sidebar
+User selects "Google Ads" from available marketing content types
+User either selects an existing campaign or creates a new one
+User selects which ad assets to generate
+User reviews generated content
+User can save/export content and return to it later via Content History
+
+3. UI Components & Screens
+3.1 Navigation Update
+
+Add a new section in the sidebar under "CONTENT" called "Marketing Content"
+Sub-items include "Google Ads", "Meta Ads" (coming soon), "Email Marketing" (coming soon), etc.
+
+3.2 Campaign Management Screen
+
+Similar to "Brand Voices" screen, showing a list of saved campaigns
+Each campaign card shows:
+
+Campaign Name
+Product/Service Name
+Industry/Category
+Date Created/Modified
+
+
+Actions: Edit, Delete
+"Create New" button in the top right
+
+3.3 Google Ads Creation Screen
+The screen will follow a simplified two-tab structure:
+Tab 1: Campaign Information & Settings
+Campaign Selection Section
+
+Dropdown to select an existing campaign OR
+Option to "Create New Campaign" which expands the form below
+Option to "Use Once Without Saving" which enables the form without saving
+
+Campaign Details Form (shown when creating new or editing)
+
+Campaign Basics
+
+Campaign Name (required for saving)
+Product/Service Name (required)
+Industry/Category dropdown
+Landing Page URL (optional)
+Campaign Objective dropdown:
+
+Sales/Conversions
+Lead Generation
+Website Traffic
+Brand Awareness
+
+
+
+
+Target Audience
+
+Audience Demographics (optional field)
+Pain Points (add multiple)
+User Needs (add multiple)
+
+
+Selling Points
+
+Unique Selling Propositions (add multiple)
+Key Benefits (add multiple)
+Special Offers/Promotions (optional)
+
+
+Keyword Information
+
+Primary Keywords (add multiple)
+Secondary Keywords (add multiple)
+Competitor Terms (add multiple, optional)
+
+
+"Save Campaign" button (if creating new or editing)
+
+Asset Selection Section (appears below campaign details)
+
+Checkboxes for which assets to generate:
+
+Responsive Search Ads
+Performance Max Assets
+Ad Extensions
+
+
+For each selected asset type, show relevant fields and limits:
+
+Responsive Search Ads:
+
+Number of Headlines (3-15)
+Number of Descriptions (2-4)
+
+
+Performance Max Assets:
+
+Number of Headlines (3-15)
+Number of Long Headlines (3-5)
+Number of Descriptions (2-5)
+
+
+Ad Extensions:
+
+Sitelinks (number: 2-8)
+Callouts (number: 2-6)
+Structured Snippets (type + number: 3-10)
+
+
+
+
+
+Generation Options Section (appears below asset selection)
+
+Use Brand Voice toggle (on by default)
+Brand Voice selector (if multiple exist)
+Tone override (optional)
+Call-to-Action emphasis dropdown (optional)
+Creativity slider (Conservative → Experimental)
+
+"Generate Content" button at the bottom
+Tab 2: Generated Content
+This tab appears after generation is complete and shows:
+
+Responsive Search Ads (if selected)
+
+Headlines section with numbered headlines
+Descriptions section with numbered descriptions
+
+
+Performance Max Assets (if selected)
+
+Headlines section
+Long Headlines section
+Descriptions section
+
+
+Ad Extensions (if selected)
+
+Sitelinks with descriptions
+Callouts
+Structured Snippets
+
+
+
+Each section will include:
+
+Copy button for individual items
+Copy All button for each section
+Character count beside each item
+Edit button to modify individual items
+Regenerate button for each section
+
+4. Functional Requirements
+4.1 Campaign Management
+
+CRUD operations for campaigns:
+
+Create: Save campaign settings for reuse
+Read: View list of saved campaigns and their details
+Update: Modify existing campaign settings
+Delete: Remove saved campaigns
+
+
+Campaign data will be stored in the database with user ID association
+Campaigns should be available across all marketing content types (Google Ads, Meta Ads, etc.)
+
+4.2 AI Generation
+
+System will use OpenAI or similar to generate ad copy variants
+Campaign information is processed to create contextually relevant ad assets
+All character limits must be strictly enforced:
+
+Headlines: 30 characters
+Descriptions: 90 characters
+Callouts: 25 characters
+Etc.
+
+
+
+4.3 Brand Voice Integration
+
+System will use existing brand voice settings to maintain consistency
+If multiple brand voices exist, user can select which to apply
+Brand voice parameters (tone, style) will influence ad generation
+
+4.4 Content Management
+
+Generated ads will be saved to content history
+Content type will be labeled as "Google Ads"
+Sub-type will specify asset type (RSA, Performance Max, Extensions)
+Users can access and edit previously generated ads
+
+4.5 Export Options
+
+Copy to clipboard (individual assets or entire sections)
+Export as CSV (Google Ads upload format)
+Export as spreadsheet
